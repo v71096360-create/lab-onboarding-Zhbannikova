@@ -1,95 +1,90 @@
 @echo off
-chcp 65001
+chcp 65001 >nul
 
-REM =====================================================
-REM Практическая работа 8. Диагностика клиентского ПК
-REM Выполнила: Жбанникова
-REM Дата: 2026
-REM =====================================================
+REM Тема: Диагностика клиентского компьютера
+REM Фамилия: Жбанникова
+REM Дата: 31.10.2026
 
-cls
+set "REPORT=%~dp0pc_report.txt"
+if exist "%REPORT%" del "%REPORT%"
 
-REM Создаём путь к файлу отчёта (рядом с bat-файлом)
-set "REPORT_FILE=%~dp0pc_report.txt"
+echo ========================================
+echo        Диагностика компьютера
+echo ========================================
+echo ======================================== >> "%REPORT%"
+echo        Диагностика компьютера >> "%REPORT%"
+echo ======================================== >> "%REPORT%"
+echo. >> "%REPORT%"
 
-REM Очищаем файл отчёта
-echo. > "%REPORT_FILE%"
-
-REM =====================================================
-echo ====================================================
-echo           ДИАГНОСТИКА КОМПЬЮТЕРА
-echo ====================================================
 echo.
+echo [Операционная система]
+echo [Операционная система] >> "%REPORT%"
+for /f "tokens=2 delims==" %%a in ('wmic os get Caption /format:list ^| find "="') do set "OS_NAME=%%a"
+for /f "tokens=2 delims==" %%a in ('wmic os get Version /format:list ^| find "="') do set "OS_VER=%%a"
+set "OS_NAME=%OS_NAME: =%"
+set "OS_VER=%OS_VER: =%"
+echo Название: %OS_NAME%
+echo Версия: %OS_VER%
+echo Название: %OS_NAME% >> "%REPORT%"
+echo Версия: %OS_VER% >> "%REPORT%"
 
-REM =====================================================
-echo ОПЕРАЦИОННАЯ СИСТЕМА
-echo =====================================================
-
-for /f "tokens=1,2 delims==" %%a in ('wmic os get Caption^,Version /format:list ^| findstr "="') do (
-    if "%%a"=="Caption" set "OS_NAME=%%b"
-    if "%%a"=="Version" set "OS_VERSION=%%b"
-)
-
-echo Операционная система: %OS_NAME%
-echo Версия: %OS_VERSION%
 echo.
+echo [Процессор]
+echo. >> "%REPORT%"
+echo [Процессор] >> "%REPORT%"
+for /f "tokens=2 delims==" %%a in ('wmic cpu get name /format:list ^| find "="') do set "CPU_NAME=%%a"
+set "CPU_NAME=%CPU_NAME: =%"
+echo %CPU_NAME%
+echo %CPU_NAME% >> "%REPORT%"
 
-REM =====================================================
-echo ПРОЦЕССОР
-echo =====================================================
-
-for /f "skip=1 delims=" %%a in ('wmic cpu get name') do (
-    if not defined CPU_NAME set "CPU_NAME=%%a"
-)
-
-echo Процессор: %CPU_NAME%
 echo.
+echo [Оперативная память]
+echo. >> "%REPORT%"
+echo [Оперативная память] >> "%REPORT%"
+for /f "tokens=2 delims==" %%a in ('wmic OS get TotalVisibleMemorySize /format:list ^| find "="') do set "RAM_TOTAL_KB=%%a"
+for /f "tokens=2 delims==" %%a in ('wmic OS get FreePhysicalMemory /format:list ^| find "="') do set "RAM_FREE_KB=%%a"
+set "RAM_TOTAL_KB=%RAM_TOTAL_KB: =%"
+set "RAM_FREE_KB=%RAM_FREE_KB: =%"
+set /a RAM_TOTAL_GB=%RAM_TOTAL_KB% / 1048576
+set /a RAM_FREE_GB=%RAM_FREE_KB% / 1048576
+echo Всего памяти (ГБ): %RAM_TOTAL_GB%
+echo Свободно памяти (ГБ): %RAM_FREE_GB%
+echo Всего памяти (ГБ): %RAM_TOTAL_GB% >> "%REPORT%"
+echo Свободно памяти (ГБ): %RAM_FREE_GB% >> "%REPORT%"
 
-REM =====================================================
-echo ОПЕРАТИВНАЯ ПАМЯТЬ
-echo =====================================================
-
-for /f "tokens=1,2 delims= " %%a in ('wmic OS get TotalVisibleMemorySize^,FreePhysicalMemory /format:list ^| findstr "TotalVisibleMemorySize FreePhysicalMemory"') do (
-    if "%%a"=="TotalVisibleMemorySize" set "TOTAL_KB=%%b"
-    if "%%a"=="FreePhysicalMemory" set "FREE_KB=%%b"
-)
-
-set /a TOTAL_GB=%TOTAL_KB% / 1048576
-set /a FREE_GB=%FREE_KB% / 1048576
-
-echo Всего памяти: %TOTAL_GB% ГБ
-echo Свободно памяти: %FREE_GB% ГБ
 echo.
+echo [Диск C]
+echo. >> "%REPORT%"
+echo [Диск C] >> "%REPORT%"
+for /f %%a in ('powershell -Command "[math]::Round((Get-WmiObject Win32_LogicalDisk -Filter 'DeviceID=\"C:\"').Size / 1GB, 0)"') do set "DISK_SIZE_GB=%%a"
+for /f %%a in ('powershell -Command "[math]::Round((Get-WmiObject Win32_LogicalDisk -Filter 'DeviceID=\"C:\"').FreeSpace / 1GB, 0)"') do set "DISK_FREE_GB=%%a"
+echo Всего на диске C (ГБ): %DISK_SIZE_GB%
+echo Свободно на диске C (ГБ): %DISK_FREE_GB%
+echo Всего на диске C (ГБ): %DISK_SIZE_GB% >> "%REPORT%"
+echo Свободно на диске C (ГБ): %DISK_FREE_GB% >> "%REPORT%"
 
-REM =====================================================
-echo ДИСК C
-echo =====================================================
-
-for /f "tokens=1,2 delims= " %%a in ('wmic logicaldisk where "DeviceID='C:'" get Size^,FreeSpace /format:list ^| findstr "Size FreeSpace"') do (
-    if "%%a"=="Size" set "DISK_SIZE=%%b"
-    if "%%a"=="FreeSpace" set "DISK_FREE=%%b"
-)
-
-set /a DISK_SIZE_GB=%DISK_SIZE% / 1073741824
-set /a DISK_FREE_GB=%DISK_FREE% / 1073741824
-
-echo Общий размер: %DISK_SIZE_GB% ГБ
-echo Свободно: %DISK_FREE_GB% ГБ
 echo.
-
-REM =====================================================
-echo УСТАНОВЛЕННЫЕ ПРОГРАММЫ
-echo =====================================================
-echo.
+echo ========================================
+echo        Установленные программы
+echo ========================================
+echo. >> "%REPORT%"
+echo ======================================== >> "%REPORT%"
+echo        Установленные программы >> "%REPORT%"
+echo ======================================== >> "%REPORT%"
 echo Идёт поиск программ, это может занять несколько минут...
-echo.
+echo Идёт поиск программ... >> "%REPORT%"
+wmic product get name /format:list | findstr "=" > temp_programs.txt
+for /f "tokens=2 delims==" %%a in (temp_programs.txt) do (
+    echo %%a
+    echo %%a >> "%REPORT%"
+)
+del temp_programs.txt
 
-wmic product get name,version /format:list | findstr "Name=" | findstr /v "Microsoft" | findstr /v "Windows"
-
 echo.
-echo ====================================================
-echo Отчёт сохранён в файле pc_report.txt
-echo ====================================================
-echo.
+echo ========================================
+echo Отчёт сохранён в файл: pc_report.txt
+echo ========================================
+echo. >> "%REPORT%"
+echo Отчёт сохранён. >> "%REPORT%"
 
 pause
