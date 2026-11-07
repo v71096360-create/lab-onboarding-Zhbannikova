@@ -11,34 +11,6 @@
  
 [Оперативная память] 
 Всего памяти (ГБ): 7 
-Свободно памяти (ГБ): 4 
+Свободно памяти (ГБ): 3 
  
 [Диск C] 
-Всего на диске C (ГБ): 98 
-Свободно на диске C (ГБ): 61 
- 
-======================================== 
-       Установленные программы 
-======================================== 
-Идёт поиск программ... 
-Python 3.13.1 Development Libraries (64-bit) 
-Viber 
-Python Launcher 
-Python 3.13.1 Executables (64-bit) 
-Python 3.13.1 Documentation (64-bit) 
-Python 3.13.1 Standard Library (64-bit) 
-Python 3.13.1 Core Interpreter (64-bit) 
-Python 3.13.1 Tcl/Tk Support (64-bit) 
-Python 3.13.1 pip Bootstrap (64-bit) 
-Python 3.13.1 Test Suite (64-bit) 
-Office 16 Click-to-Run Extensibility Component 
-Office 16 Click-to-Run Localization Component 
-Microsoft Visual C++ 2022 X64 Additional Runtime - 14.50.35719 
-Microsoft Visual C++ 2022 X64 Minimum Runtime - 14.50.35719 
-Microsoft Visual C++ 2022 X86 Minimum Runtime - 14.50.35719 
-ECHO is off.
-Microsoft Visual C++ 2005 Redistributable 
-Microsoft Visual C++ 2010  x86 Redistributable - 10.0.30319 
-Microsoft Visual C++ 2022 X86 Additional Runtime - 14.50.35719 
- 
-Отчёт сохранён. 
