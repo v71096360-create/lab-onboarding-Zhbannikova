@@ -1,214 +1,228 @@
 @echo off
+setlocal enabledelayedexpansion
 chcp 65001 >nul
 
 REM Тема: Диагностика клиентского компьютера (Часть 2 - Анализ)
 REM Фамилия: Жбанникова
-REM Дата: 07.11.2026
+REM Дата: 08.11.2026
 
+REM ============================================
+REM 1. ПОДПРОГРАММА ДЛЯ ВЫВОДА (DRY принцип)
+REM Устраняет дублирование: один вызов выводит и на экран, и в файл
+REM ============================================
+:log
+echo(%~1
+echo(%~1 >> "%REPORT%"
+exit /b
+
+REM ============================================
+REM 2. ИНИЦИАЛИЗАЦИЯ И ВРЕМЕННАЯ МЕТКА
+REM ============================================
 set "REPORT=%~dp0pc_report.txt"
 if exist "%REPORT%" del "%REPORT%"
 
-REM Создаём временный файл со списком программ для анализа
+call :log "========================================"
+call :log "       Диагностика компьютера"
+call :log "========================================"
+
+REM Получаем дату и время (защита от пустых значений)
+set "DT="
+for /f "tokens=2 delims==" %%a in ('wmic OS get LocalDateTime /value ^| find "="') do set "DT=%%a"
+if defined DT (
+    set "DT=!DT:~0,8! !DT:~8,6!"
+    call :log "Дата и время проверки: !DT!"
+) else (
+    call :log "Дата и время проверки: не удалось определить"
+)
+
+REM ============================================
+REM 3. СБОР ДАННЫХ С ЗАЩИТОЙ ОТ ПУСТЫХ ЗНАЧЕНИЙ
+REM ============================================
+
+REM Операционная система
+call :log ""
+call :log "[Операционная система]"
+set "OS_NAME="
+set "OS_VER="
+for /f "tokens=2 delims==" %%a in ('wmic os get Caption /value ^| find "="') do set "OS_NAME=%%a"
+for /f "tokens=2 delims==" %%a in ('wmic os get Version /value ^| find "="') do set "OS_VER=%%a"
+set "OS_NAME=!OS_NAME: =!"
+set "OS_VER=!OS_VER: =!"
+if defined OS_NAME (
+    call :log "Название: !OS_NAME!"
+    call :log "Версия: !OS_VER!"
+) else (
+    call :log "Не удалось получить сведения об ОС"
+)
+
+REM Процессор
+call :log ""
+call :log "[Процессор]"
+set "CPU_NAME="
+for /f "tokens=2 delims==" %%a in ('wmic cpu get name /value ^| find "="') do set "CPU_NAME=%%a"
+set "CPU_NAME=!CPU_NAME: =!"
+if defined CPU_NAME (
+    call :log "!CPU_NAME!"
+) else (
+    call :log "Не удалось получить сведения о процессоре"
+)
+
+REM Оперативная память
+call :log ""
+call :log "[Оперативная память]"
+set "RAM_TOTAL_KB="
+set "RAM_FREE_KB="
+for /f "tokens=2 delims==" %%a in ('wmic OS get TotalVisibleMemorySize /value ^| find "="') do set "RAM_TOTAL_KB=%%a"
+for /f "tokens=2 delims==" %%a in ('wmic OS get FreePhysicalMemory /value ^| find "="') do set "RAM_FREE_KB=%%a"
+set "RAM_TOTAL_KB=!RAM_TOTAL_KB: =!"
+set "RAM_FREE_KB=!RAM_FREE_KB: =!"
+if defined RAM_TOTAL_KB (
+    set /a RAM_TOTAL_GB=!RAM_TOTAL_KB! / 1048576
+    set /a RAM_FREE_GB=!RAM_FREE_KB! / 1048576
+    call :log "Всего памяти (ГБ): !RAM_TOTAL_GB!"
+    call :log "Свободно памяти (ГБ): !RAM_FREE_GB!"
+) else (
+    call :log "Не удалось получить сведения о памяти"
+)
+
+REM Диск C (через PowerShell для избежания переполнения разрядной сетки)
+call :log ""
+call :log "[Диск C]"
+set "DISK_SIZE_GB="
+set "DISK_FREE_GB="
+for /f %%a in ('powershell -Command "[math]::Round((Get-WmiObject Win32_LogicalDisk -Filter 'DeviceID=\"C:\"').Size / 1GB, 0)"') do set "DISK_SIZE_GB=%%a"
+for /f %%a in ('powershell -Command "[math]::Round((Get-WmiObject Win32_LogicalDisk -Filter 'DeviceID=\"C:\"').FreeSpace / 1GB, 0)"') do set "DISK_FREE_GB=%%a"
+if defined DISK_SIZE_GB (
+    call :log "Всего на диске C (ГБ): !DISK_SIZE_GB!"
+    call :log "Свободно на диске C (ГБ): !DISK_FREE_GB!"
+) else (
+    call :log "Не удалось получить сведения о диске C"
+)
+
+REM ============================================
+REM 4. ФОРМИРОВАНИЕ СПИСКА ПРОГРАММ (БЫСТРЫЙ reg query)
+REM Опрос обеих веток реестра (64-бит и 32-бит)
+REM ============================================
+call :log ""
+call :log "========================================"
+call :log "       Установленные программы"
+call :log "========================================"
+call :log ""
+call :log "Идёт быстрый опрос реестра..."
+
 set "APPS_FILE=%TEMP%\apps_list.txt"
 if exist "%APPS_FILE%" del "%APPS_FILE%"
 
-echo ========================================
-echo        Диагностика компьютера
-echo ========================================
-echo ======================================== >> "%REPORT%"
-echo        Диагностика компьютера >> "%REPORT%"
-echo ======================================== >> "%REPORT%"
-echo. >> "%REPORT%"
-
-echo.
-echo [Операционная система]
-echo [Операционная система] >> "%REPORT%"
-for /f "tokens=2 delims==" %%a in ('wmic os get Caption /format:list ^| find "="') do set "OS_NAME=%%a"
-for /f "tokens=2 delims==" %%a in ('wmic os get Version /format:list ^| find "="') do set "OS_VER=%%a"
-set "OS_NAME=%OS_NAME: =%"
-set "OS_VER=%OS_VER: =%"
-echo Название: %OS_NAME%
-echo Версия: %OS_VER%
-echo Название: %OS_NAME% >> "%REPORT%"
-echo Версия: %OS_VER% >> "%REPORT%"
-
-echo.
-echo [Процессор]
-echo. >> "%REPORT%"
-echo [Процессор] >> "%REPORT%"
-for /f "tokens=2 delims==" %%a in ('wmic cpu get name /format:list ^| find "="') do set "CPU_NAME=%%a"
-set "CPU_NAME=%CPU_NAME: =%"
-echo %CPU_NAME%
-echo %CPU_NAME% >> "%REPORT%"
-
-echo.
-echo [Оперативная память]
-echo. >> "%REPORT%"
-echo [Оперативная память] >> "%REPORT%"
-for /f "tokens=2 delims==" %%a in ('wmic OS get TotalVisibleMemorySize /format:list ^| find "="') do set "RAM_TOTAL_KB=%%a"
-for /f "tokens=2 delims==" %%a in ('wmic OS get FreePhysicalMemory /format:list ^| find "="') do set "RAM_FREE_KB=%%a"
-set "RAM_TOTAL_KB=%RAM_TOTAL_KB: =%"
-set "RAM_FREE_KB=%RAM_FREE_KB: =%"
-set /a RAM_TOTAL_GB=%RAM_TOTAL_KB% / 1048576
-set /a RAM_FREE_GB=%RAM_FREE_KB% / 1048576
-echo Всего памяти (ГБ): %RAM_TOTAL_GB%
-echo Свободно памяти (ГБ): %RAM_FREE_GB%
-echo Всего памяти (ГБ): %RAM_TOTAL_GB% >> "%REPORT%"
-echo Свободно памяти (ГБ): %RAM_FREE_GB% >> "%REPORT%"
-
-echo.
-echo [Диск C]
-echo. >> "%REPORT%"
-echo [Диск C] >> "%REPORT%"
-for /f %%a in ('powershell -Command "[math]::Round((Get-WmiObject Win32_LogicalDisk -Filter 'DeviceID=\"C:\"').Size / 1GB, 0)"') do set "DISK_SIZE_GB=%%a"
-for /f %%a in ('powershell -Command "[math]::Round((Get-WmiObject Win32_LogicalDisk -Filter 'DeviceID=\"C:\"').FreeSpace / 1GB, 0)"') do set "DISK_FREE_GB=%%a"
-echo Всего на диске C (ГБ): %DISK_SIZE_GB%
-echo Свободно на диске C (ГБ): %DISK_FREE_GB%
-echo Всего на диске C (ГБ): %DISK_SIZE_GB% >> "%REPORT%"
-echo Свободно на диске C (ГБ): %DISK_FREE_GB% >> "%REPORT%"
-
-echo.
-echo ========================================
-echo        Установленные программы
-echo ========================================
-echo. >> "%REPORT%"
-echo ======================================== >> "%REPORT%"
-echo        Установленные программы >> "%REPORT%"
-echo ======================================== >> "%REPORT%"
-echo Идёт поиск программ, это может занять несколько минут...
-echo Идёт поиск программ... >> "%REPORT%"
-wmic product get name /format:list | findstr "=" > "%APPS_FILE%"
-for /f "tokens=2 delims==" %%a in (%APPS_FILE%) do (
-    echo %%a
-    echo %%a >> "%REPORT%"
+REM 64-битные программы
+for /f "skip=2 tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall" /s /v DisplayName 2^>nul') do (
+    echo %%B >> "%APPS_FILE%"
 )
 
-echo.
-echo ========================================
-echo Отчёт сохранён в файл: pc_report.txt
-echo ========================================
-echo. >> "%REPORT%"
-echo Отчёт сохранён. >> "%REPORT%"
-
-REM ============================================
-REM АНАЛИЗ: НЕДОСТАЮЩЕЕ ПО
-REM ============================================
-echo.
-echo ========================================
-echo   АНАЛИЗ: НЕДОСТАЮЩЕЕ ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ
-echo ========================================
-echo.
-echo ======================================== >> "%REPORT%"
-echo   АНАЛИЗ: НЕДОСТАЮЩЕЕ ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ >> "%REPORT%"
-echo ======================================== >> "%REPORT%"
-
-echo [Проверка офисного пакета]
-echo [Проверка офисного пакета] >> "%REPORT%"
-findstr /I "Office" "%APPS_FILE%" >nul
-if errorlevel 1 (
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Офисный пакет не обнаружен. Рекомендуется установить Microsoft Office или LibreOffice.
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Офисный пакет не обнаружен. >> "%REPORT%"
-) else (
-    echo [OK] Офисный пакет найден
-    echo [OK] Офисный пакет найден >> "%REPORT%"
+REM 32-битные программы (WOW6432Node)
+for /f "skip=2 tokens=2,*" %%A in ('reg query "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall" /s /v DisplayName 2^>nul') do (
+    echo %%B >> "%APPS_FILE%"
 )
 
-echo.
-echo [Проверка веб-браузера]
-echo [Проверка веб-браузера] >> "%REPORT%"
-findstr /I "Chrome Firefox Yandex Edge Opera" "%APPS_FILE%" >nul
-if errorlevel 1 (
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Веб-браузер не обнаружен. Рекомендуется установить Google Chrome или Firefox.
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Веб-браузер не обнаружен. >> "%REPORT%"
-) else (
-    echo [OK] Веб-браузер найден
-    echo [OK] Веб-браузер найден >> "%REPORT%"
-)
-
-echo.
-echo [Проверка программы для чтения PDF]
-echo [Проверка программы для чтения PDF] >> "%REPORT%"
-findstr /I "Acrobat Foxit SumatraPDF PDF" "%APPS_FILE%" >nul
-if errorlevel 1 (
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Программа для чтения PDF не обнаружена. Рекомендуется установить Adobe Acrobat Reader.
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Программа для чтения PDF не обнаружена. >> "%REPORT%"
-) else (
-    echo [OK] Программа для чтения PDF найдена
-    echo [OK] Программа для чтения PDF найдена >> "%REPORT%"
-)
-
-echo.
-echo [Проверка архиватора]
-echo [Проверка архиватора] >> "%REPORT%"
-findstr /I "7-Zip WinRAR WinZip" "%APPS_FILE%" >nul
-if errorlevel 1 (
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Архиватор не обнаружен. Рекомендуется установить 7-Zip или WinRAR.
-    echo [ТРЕБУЕТ ВНИМАНИЯ] Архиватор не обнаружен. >> "%REPORT%"
-) else (
-    echo [OK] Архиватор найден
-    echo [OK] Архиватор найден >> "%REPORT%"
+REM Выводим список программ в отчёт
+call :log "Список программ:"
+for /f "usebackq delims=" %%A in ("%APPS_FILE%") do (
+    call :log "  - %%A"
 )
 
 REM ============================================
-REM АНАЛИЗ: ИЗЛИШНЕЕ ПО
+REM 5. АНАЛИЗ: НЕДОСТАЮЩЕЕ ПО
 REM ============================================
-echo.
-echo ========================================
-echo   АНАЛИЗ: ПРОГРАММЫ, ТРЕБУЮЩИЕ ПРОВЕРКИ
-echo ========================================
-echo.
-echo ======================================== >> "%REPORT%"
-echo   АНАЛИЗ: ПРОГРАММЫ, ТРЕБУЮЩИЕ ПРОВЕРКИ >> "%REPORT%"
-echo ======================================== >> "%REPORT%"
+call :log ""
+call :log "========================================"
+call :log "   АНАЛИЗ: НЕДОСТАЮЩЕЕ ПРОГРАММНОЕ ОБЕСПЕЧЕНИЕ"
+call :log "========================================"
 
-echo [Игровые платформы]
-echo [Игровые платформы] >> "%REPORT%"
-findstr /I "Steam Epic GOG Origin Game Gaming" "%APPS_FILE%" >nul
+call :log ""
+call :log "[Проверка офисного пакета]"
+findstr /I "Office LibreOffice OpenOffice" "%APPS_FILE%" >nul 2>&1
 if errorlevel 1 (
-    echo Игровые платформы не найдены
-    echo Игровые платформы не найдены >> "%REPORT%"
+    call :log "[ТРЕБУЕТ ВНИМАНИЯ] Офисный пакет не обнаружен. Рекомендуется установить Microsoft Office или LibreOffice."
 ) else (
-    echo Найдены игровые платформы:
-    echo Найдены игровые платформы: >> "%REPORT%"
+    call :log "[OK] Офисный пакет найден"
+)
+
+call :log ""
+call :log "[Проверка веб-браузера]"
+findstr /I "Chrome Firefox Yandex Edge Opera" "%APPS_FILE%" >nul 2>&1
+if errorlevel 1 (
+    call :log "[ТРЕБУЕТ ВНИМАНИЯ] Веб-браузер не обнаружен. Рекомендуется установить Google Chrome или Firefox."
+) else (
+    call :log "[OK] Веб-браузер найден"
+)
+
+call :log ""
+call :log "[Проверка программы для чтения PDF]"
+findstr /I "Acrobat Foxit SumatraPDF PDF" "%APPS_FILE%" >nul 2>&1
+if errorlevel 1 (
+    call :log "[ТРЕБУЕТ ВНИМАНИЯ] Программа для чтения PDF не обнаружена. Рекомендуется установить Adobe Acrobat Reader."
+) else (
+    call :log "[OK] Программа для чтения PDF найдена"
+)
+
+call :log ""
+call :log "[Проверка архиватора]"
+findstr /I "7-Zip WinRAR WinZip" "%APPS_FILE%" >nul 2>&1
+if errorlevel 1 (
+    call :log "[ТРЕБУЕТ ВНИМАНИЯ] Архиватор не обнаружен. Рекомендуется установить 7-Zip или WinRAR."
+) else (
+    call :log "[OK] Архиватор найден"
+)
+
+REM ============================================
+REM 6. АНАЛИЗ: ИЗЛИШНЕЕ ПО
+REM ============================================
+call :log ""
+call :log "========================================"
+call :log "   АНАЛИЗ: ПРОГРАММЫ, ТРЕБУЮЩИЕ ПРОВЕРКИ"
+call :log "========================================"
+
+call :log ""
+call :log "[Игровые платформы]"
+findstr /I "Steam Epic GOG Origin Game Gaming" "%APPS_FILE%" >nul 2>&1
+if errorlevel 1 (
+    call :log "Игровые платформы не найдены"
+) else (
+    call :log "Найдены игровые платформы или игры:"
     findstr /I "Steam Epic GOG Origin Game Gaming" "%APPS_FILE%"
-    findstr /I "Steam Epic GOG Origin Game Gaming" "%APPS_FILE%" >> "%REPORT%"
-    echo Рекомендуется проверить, установлены ли они по согласованию с руководством.
-    echo Рекомендуется проверить установку. >> "%REPORT%"
+    call :log "Рекомендуется проверить, установлены ли они по согласованию с руководством."
 )
 
-echo.
-echo [Торрент-клиенты]
-echo [Торрент-клиенты] >> "%REPORT%"
-findstr /I "uTorrent BitTorrent qBittorrent Torrent" "%APPS_FILE%" >nul
+call :log ""
+call :log "[Торрент-клиенты]"
+findstr /I "uTorrent BitTorrent qBittorrent Torrent" "%APPS_FILE%" >nul 2>&1
 if errorlevel 1 (
-    echo Торрент-клиенты не найдены
-    echo Торрент-клиенты не найдены >> "%REPORT%"
+    call :log "Торрент-клиенты не найдены"
 ) else (
-    echo Найдены торрент-клиенты:
-    echo Найдены торрент-клиенты: >> "%REPORT%"
+    call :log "Найдены торрент-клиенты:"
     findstr /I "uTorrent BitTorrent qBittorrent Torrent" "%APPS_FILE%"
-    findstr /I "uTorrent BitTorrent qBittorrent Torrent" "%APPS_FILE%" >> "%REPORT%"
-    echo Внимание: такие программы создают нагрузку на сеть.
-    echo Внимание: нагрузка на сеть. >> "%REPORT%"
+    call :log "Внимание: такие программы создают нагрузку на сеть."
 )
 
-echo.
-echo [Мессенджеры]
-echo [Мессенджеры] >> "%REPORT%"
-findstr /I "Discord Telegram WhatsApp Viber Skype" "%APPS_FILE%" >nul
+call :log ""
+call :log "[Мессенджеры]"
+findstr /I "Discord Telegram WhatsApp Viber Skype" "%APPS_FILE%" >nul 2>&1
 if errorlevel 1 (
-    echo Мессенджеры не найдены
-    echo Мессенджеры не найдены >> "%REPORT%"
+    call :log "Мессенджеры не найдены"
 ) else (
-    echo Найдены мессенджеры:
-    echo Найдены мессенджеры: >> "%REPORT%"
+    call :log "Найдены мессенджеры:"
     findstr /I "Discord Telegram WhatsApp Viber Skype" "%APPS_FILE%"
-    findstr /I "Discord Telegram WhatsApp Viber Skype" "%APPS_FILE%" >> "%REPORT%"
-    echo Рекомендуется проверить, используются ли они для рабочих задач.
-    echo Рекомендуется проверить использование. >> "%REPORT%"
+    call :log "Рекомендуется проверить, используются ли они для рабочих задач."
 )
 
-REM Удаляем временный файл
+REM ============================================
+REM 7. ЗАВЕРШЕНИЕ И ОЧИСТКА
+REM ============================================
+call :log ""
+call :log "========================================"
+call :log "Отчёт сохранён в файл: %REPORT%"
+call :log "========================================"
+
+REM Удаление временного файла
 if exist "%APPS_FILE%" del "%APPS_FILE%"
 
 pause
